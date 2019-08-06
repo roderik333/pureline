@@ -1,6 +1,6 @@
 #!/bin/env bash
 
-# PureLine - A Pure Bash Powerline PS1 Command Prompt 
+# PureLine - A Pure Bash Powerline PS1 Command Prompt
 
 # -----------------------------------------------------------------------------
 # returns a string with the powerline symbol for a section end
@@ -159,6 +159,75 @@ function read_only_module {
     fi
 }
 
+# append to prompt: hg bookmark/[branch] with indictors for;
+#     number of; modified files, stashed files and untracked
+# arg: $1 foreground color
+# arg; $2 background color
+# option variables;
+#   PL_HG_STASH: true/false
+#   PL_HG_PHASE: true/false
+#   PL_HG_MODIFIED: true/false
+#   PL_HG_UNTRACKED: true/false
+# Due to the way hg works it takes to long to query remote for
+# outgoing (staged) and summary --remote (behind/ahead).
+# Phase is an aproximation of ahead/behind, and outgoing is ignored.
+function hg_module {
+    local hg_bookmark=$(hg bookmarks 2>/dev/null | awk '{print $2}' )
+    local hg_branch=$(hg branch 2>/dev/null | awk '{print $1}' )
+    local content
+    if [ "$hg_bookmark" ] && [ "$hg_bookmark" != "bookmarks" ]; then
+        content="${PL_SYMBOLS[git_branch]} ${hg_bookmark}"
+    else
+        if [ "$hg_branch" ]; then
+            content="${PL_SYMBOLS[git_branch]} ${hg_branch}"
+        fi
+    fi
+    if [ "$content" ]; then
+        local bg_color="$1"
+        local fg_color="$2"
+        if [ "$PL_HG_STASH" = true ]; then
+            local number_stash="$(hg stash -l 2>/dev/null | wc -l)"
+            if [ ! "$number_stash" -eq 0 ]; then
+                content+="${PL_SYMBOLS[hg_stash]}$number_stash"
+            fi
+        fi
+
+        if [ "$PL_HG_PHASES" = true ]; then
+            local hg_phase="$(hg summary 2>/dev/null | awk '/^phases: /{print $3}')"
+            if [ "$hg_phase" ]; then
+                content+="${PL_SYMBOLS[hg_ahead]}$hg_phase"
+            else
+                content+="${PL_SYMBOLS[hg_phase]}"
+            fi
+        fi
+
+        if [ "$PL_HG_MODIFIED" = true ]; then
+            local number_modified="$(hg status -m 2>/dev/null| wc -l)"
+            if [ ! "$number_modified" -eq "0" ]; then
+                content+=" ${PL_SYMBOLS[soft_separator]} ${PL_SYMBOLS[hg_modified]}$number_modified"
+            fi
+        fi
+
+        if [ "$PL_HG_UNTRACKED" = true ]; then
+            local number_untracked="$(hg status -u 2>/dev/null | wc -l)"
+            if [ ! "$number_untracked" -eq "0" ]; then
+                content+=" ${PL_SYMBOLS[soft_separator]} ${PL_SYMBOLS[hg_untracked]}$number_untracked"
+            fi
+        fi
+
+        if [ -n "$(hg status -m 2>/dev/null)" ]; then
+            if [ -n "$PL_HG_DIRTY_FG" ]; then
+                fg_color="$PL_HG_DIRTY_FG"
+            fi
+            if [ -n "$PL_HG_DIRTY_BG" ]; then
+                bg_color="$PL_HG_DIRTY_BG"
+            fi
+        fi
+        PS1+="$(section_end $fg_color $bg_color)"
+        PS1+="$(section_content $fg_color $bg_color " $content ")"
+        __last_color="$bg_color"
+    fi
+}
 # -----------------------------------------------------------------------------
 # append to prompt: git branch with indictors for;
 #     number of; modified files, staged files and conflicts
@@ -417,6 +486,15 @@ declare -A PL_SYMBOLS=(
 [git_staged]="•"
 [git_conflicts]="*"
 
+[hg_branch]="╬"
+[hg_untracked]="?"
+[hg_stash]="§"
+[hg_ahead]="↑"
+[hg_behind]="↓"
+[hg_modified]="+"
+[hg_staged]="•"
+[hg_conflicts]="*"
+
 [ssh]="╤"
 [read_only]="Θ"
 [return_code]="x"
@@ -447,7 +525,7 @@ fi
 # grab a snapshot of the systems PROMPT_COMMAND. this can then be
 # appended to pureline when sourced without continually appending
 # pureline to itself.
-if [ -z "$__PROMPT_COMMAND" ]; then 
+if [ -z "$__PROMPT_COMMAND" ]; then
     __PROMPT_COMMAND="$PROMPT_COMMAND"
 fi
 
