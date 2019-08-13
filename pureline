@@ -175,6 +175,8 @@ function hg_module {
     local hg_bookmark=$(hg bookmarks 2>/dev/null | awk '{print $2}' )
     local hg_branch=$(hg branch 2>/dev/null | awk '{print $1}' )
     local content
+    local number_modified="$(hg status -m 2>/dev/null| wc -l)"
+
     if [ "$hg_bookmark" ] && [ "$hg_bookmark" != "bookmarks" ]; then
         content="${PL_SYMBOLS[git_branch]} ${hg_bookmark}"
     else
@@ -191,23 +193,26 @@ function hg_module {
                 content+="${PL_SYMBOLS[hg_stash]}$number_stash"
             fi
         fi
-
+       
         if [ "$PL_HG_PHASES" = true ]; then
             local hg_phase="$(hg summary 2>/dev/null | awk '/^phases: /{print $3}')"
             if [ "$hg_phase" ]; then
                 content+="${PL_SYMBOLS[hg_ahead]}$hg_phase"
             else
-                content+="${PL_SYMBOLS[hg_phase]}"
+                if [ ! "$number_modified" -eq "0" ]; then
+                    content+=" ${PL_SYMBOLS[hg_behind]}"
+                else
+                    content+="${PL_SYMBOLS[hg_phase]}"
+                fi
             fi
         fi
 
         if [ "$PL_HG_MODIFIED" = true ]; then
-            local number_modified="$(hg status -m 2>/dev/null| wc -l)"
             if [ ! "$number_modified" -eq "0" ]; then
                 content+=" ${PL_SYMBOLS[soft_separator]} ${PL_SYMBOLS[hg_modified]}$number_modified"
             fi
         fi
-
+ 
         if [ "$PL_HG_UNTRACKED" = true ]; then
             local number_untracked="$(hg status -u 2>/dev/null | wc -l)"
             if [ ! "$number_untracked" -eq "0" ]; then
